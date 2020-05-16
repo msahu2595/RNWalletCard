@@ -1,36 +1,155 @@
-import * as React from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import React, { useState } from "react";
+import { Dimensions, StyleSheet, View } from "react-native";
 
-const instructions = Platform.select({
-  ios: `Press Cmd+R to reload,\nCmd+D or shake for dev menu`,
-  android: `Double tap R on your keyboard to reload,\nShake or press menu button for dev menu`,
-});
+import Animated, {
+  Extrapolate,
+  add,
+  interpolate,
+} from "react-native-reanimated";
 
-export default function App() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.welcome}>Welcome to React Native!</Text>
-      <Text style={styles.instructions}>To get started, edit App.js</Text>
-      <Text style={styles.instructions}>{instructions}</Text>
-    </View>
-  );
-}
+import {
+  PanGestureHandler,
+  gestureHandlerRootHOC,
+} from "react-native-gesture-handler";
+
+import {
+  diffClamp,
+  usePanGestureHandler,
+  withDecay,
+  withOffset,
+} from "react-native-redash";
+
+import Card, { CARD_HEIGHT, Cards } from "./components/Card";
+
+const { height } = Dimensions.get("window");
+const MARGIN = 16;
+const HEIGHT = CARD_HEIGHT + MARGIN * 2;
+const cards = [
+  {
+    type: Cards.Card1,
+  },
+  {
+    type: Cards.Card2,
+  },
+  {
+    type: Cards.Card3,
+  },
+  {
+    type: Cards.Card4,
+  },
+  {
+    type: Cards.Card5,
+  },
+  {
+    type: Cards.Card6,
+  },
+];
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5FCFF',
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    marginTop: 100,
+  },
+  card: {
+    marginVertical: MARGIN,
   },
   welcome: {
     fontSize: 20,
-    textAlign: 'center',
+    textAlign: "center",
     margin: 10,
   },
   instructions: {
-    textAlign: 'center',
-    color: '#333333',
+    textAlign: "center",
+    color: "#333333",
     marginBottom: 5,
   },
 });
+
+const App = () => {
+  const [containerHeight, setContainerHeight] = useState(height);
+
+  const visibleCards = Math.floor(containerHeight / HEIGHT);
+
+  const {
+    gestureHandler,
+    translation,
+    velocity,
+    state,
+  } = usePanGestureHandler();
+
+  const y = diffClamp(
+    withDecay({
+      value: translation.y,
+      velocity: velocity.y,
+      state,
+    }),
+    -HEIGHT * cards.length + visibleCards * HEIGHT,
+    0
+  );
+
+  return (
+    <PanGestureHandler {...gestureHandler}>
+      <Animated.View
+        style={styles.container}
+        onLayout={({
+          nativeEvent: {
+            layout: { height: h },
+          },
+        }) => setContainerHeight(h)}
+      >
+        {cards.map(({ type }, index) => {
+          const positionY = add(y, index * HEIGHT);
+
+          const isDisappearing = -HEIGHT;
+
+          const isTop = 0;
+
+          const isBottom = HEIGHT * (visibleCards - 1);
+
+          const isAppearing = HEIGHT * visibleCards;
+
+          const translateYWithScale = interpolate(positionY, {
+            inputRange: [isBottom, isAppearing],
+            outputRange: [0, -HEIGHT / 4],
+            extrapolate: Extrapolate.CLAMP,
+          });
+
+          const translateY = add(
+            interpolate(y, {
+              inputRange: [-HEIGHT * index, 0],
+              outputRange: [-HEIGHT * index, 0],
+              extrapolate: Extrapolate.CLAMP,
+            }),
+            translateYWithScale
+          );
+
+          const scale = interpolate(positionY, {
+            inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+            outputRange: [0.5, 1, 1, 0.5],
+            extrapolate: Extrapolate.CLAMP,
+          });
+
+          const opacity = interpolate(positionY, {
+            inputRange: [isDisappearing, isTop, isBottom, isAppearing],
+            outputRange: [0, 1, 1, 0],
+            extrapolate: Extrapolate.CLAMP,
+          });
+          return (
+            <Animated.View
+              style={[
+                styles.card,
+                { opacity, transform: [{ translateY }, { scale }] },
+              ]}
+              key={index}
+            >
+              <Card {...{ type }} />
+            </Animated.View>
+          );
+        })}
+      </Animated.View>
+    </PanGestureHandler>
+  );
+};
+
+export default App;
